@@ -1,0 +1,23 @@
+project:
+  type: website
+
+website:
+  title: "[TBD] Frictions Frequency and Modality vs User Satifaction"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+      - about.qmd
+
+format:
+  html:
+    theme: cyborg
+    toc: true
+    code-fold: show
+    code-tools: true
+  pdf:
+    toc: true
+    documentclass: article
+    colorlinks: true
+    geometry:
+      - margin=1in
