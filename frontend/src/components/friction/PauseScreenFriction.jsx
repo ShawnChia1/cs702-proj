@@ -28,7 +28,7 @@ function randomQuote() {
   return QUOTES[Math.floor(Math.random() * QUOTES.length)];
 }
 
-export default function PauseScreenFriction({ onComplete, duration = 7 }) {
+export default function PauseScreenFriction({ onComplete, duration = 3 }) {
   const [secondsLeft, setSecondsLeft] = useState(duration);
   const [quote] = useState(randomQuote);
 

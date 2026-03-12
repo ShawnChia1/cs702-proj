@@ -34,8 +34,8 @@ export default function DemographicsForm({ onSubmit }) {
 
   function handleSubmit(e) {
     e.preventDefault();
-    const errs = validate();
-    if (Object.keys(errs).length) { setErrors(errs); return; }
+    // const errs = validate();
+    // if (Object.keys(errs).length) { setErrors(errs); return; }
     onSubmit(demographics);
   }
 

@@ -21,6 +21,7 @@ import DemographicsForm from './components/study/DemographicsForm';
 import FeedPage         from './pages/FeedPage';
 import MemoryTestPage   from './pages/MemoryTestPage';
 import SurveyPage       from './pages/SurveyPage';
+import ThankYouPage     from './pages/ThankYouPage';
 import api              from './services/api';
 
 // ── Admin / debug overlay (only in dev) ───────────────────────────────────────
@@ -50,7 +51,7 @@ export default function App() {
 
     const resolved = CONDITIONS.includes(urlCondition)
       ? urlCondition
-      : assignCondition();
+      : null;
     const resolvedFreq = [3, 5, 10, 15].includes(urlFreq) ? urlFreq : 5;
 
     setCondition(resolved, resolvedFreq);
@@ -95,7 +96,7 @@ export default function App() {
         return <SurveyPage />;
 
       case 'done':
-        return null; // SurveyPage shows the thank-you screen itself
+        return <ThankYouPage /> // SurveyPage shows the thank-you screen itself
 
       default:
         return <ConsentForm onConsent={() => setPhase('demographics')} />;

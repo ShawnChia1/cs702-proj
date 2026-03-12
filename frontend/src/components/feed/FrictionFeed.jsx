@@ -27,77 +27,102 @@
  *  the same postsViewed.length value after the overlay dismisses.
  */
 
-import React, { useCallback, useState, useEffect, useRef } from 'react';
-import PostCard from '../PostCard';
-import ReactionFriction       from '../friction/ReactionFriction';
-import ButtonToggleFriction   from '../friction/ButtonToggleFriction';
-import ContentFeedbackFriction from '../friction/ContentFeedbackFriction';
-import PauseScreenFriction    from '../friction/PauseScreenFriction';
-import MiniGameFriction       from '../friction/MiniGameFriction';
-import useSessionStore        from '../../store/sessionStore';
-import useScrollTracker       from '../../hooks/useScrollTracker';
+import React, { useCallback, useState, useEffect, useRef } from "react";
+import PostCard from "../PostCard";
+import ReactionFriction from "../friction/ReactionFriction";
+import ButtonToggleFriction from "../friction/ButtonToggleFriction";
+import ContentFeedbackFriction from "../friction/ContentFeedbackFriction";
+import PauseScreenFriction from "../friction/PauseScreenFriction";
+import MiniGameFriction from "../friction/MiniGameFriction";
+import useSessionStore, { assignCondition } from "../../store/sessionStore";
+import useScrollTracker from "../../hooks/useScrollTracker";
 
 const POSTS_PER_PAGE = 5;
 
 const FRICTION_COMPONENT = {
   reaction: ReactionFriction,
-  button:   ButtonToggleFriction,
+  button: ButtonToggleFriction,
   feedback: ContentFeedbackFriction,
-  pause:    PauseScreenFriction,
+  pause: PauseScreenFriction,
   minigame: MiniGameFriction,
 };
 
-export default function FrictionFeed({ posts, condition, frictionFrequency, onComplete }) {
-  const { logPostView, logScroll, logFrictionShown, logFrictionDone, postsViewed } =
-    useSessionStore();
+function getRandomFriction() {
+  const keys = Object.keys(FRICTION_COMPONENT);
+  return keys[Math.floor(Math.random() * keys.length)];
+}
 
-  const [visibleCount, setVisibleCount]   = useState(POSTS_PER_PAGE);
-  const [showFriction, setShowFriction]   = useState(false);
+export default function FrictionFeed({
+  posts,
+  condition,
+  frictionFrequency,
+  onComplete,
+}) {
+  const {
+    logPostView,
+    logScroll,
+    logFrictionShown,
+    logFrictionDone,
+    postsViewed,
+  } = useSessionStore();
 
-  const sentinelRef        = useRef(null);
-  const completedRef       = useRef(false);
+  const [visibleCount, setVisibleCount] = useState(POSTS_PER_PAGE);
+  const [showFriction, setShowFriction] = useState(false);
+  const [currentFriction, setCurrentFriction] = useState(condition);
+
+  const sentinelRef = useRef(null);
+  const completedRef = useRef(false);
   const frictionShownTsRef = useRef(null);
-  const containerRef2      = useRef(null); // for locking scroll
+  const containerRef2 = useRef(null); // for locking scroll
 
   // Ref-counter gate: counts posts viewed since the last friction gate.
   // Lives entirely in refs so it is never stale inside callbacks.
-  const postsSinceGateRef  = useRef(0);
-  const frictionActiveRef  = useRef(false); // mirrors showFriction for use in callbacks
+  const postsSinceGateRef = useRef(0);
+  const frictionActiveRef = useRef(false); // mirrors showFriction for use in callbacks
 
   // Keep frictionFrequency accessible inside the dwell callback without
   // re-creating the callback every time the prop changes.
   const freqRef = useRef(frictionFrequency);
-  useEffect(() => { freqRef.current = frictionFrequency; }, [frictionFrequency]);
+  useEffect(() => {
+    freqRef.current = frictionFrequency;
+  }, [frictionFrequency]);
 
   // ── Scroll telemetry ───────────────────────────────────────────────────────
   const handleScroll = useCallback((data) => logScroll(data), [logScroll]);
-  const scrollRef    = useScrollTracker(handleScroll);
+  const scrollRef = useScrollTracker(handleScroll);
 
   // Merge both refs onto the same container div
   function setContainerRef(el) {
-    scrollRef.current  = el;
+    scrollRef.current = el;
     containerRef2.current = el;
   }
 
   // ── Dwell-time telemetry + gate trigger ────────────────────────────────────
-  const handleDwellEnd = useCallback((stats) => {
-    logPostView(stats);
+  const handleDwellEnd = useCallback(
+    (stats) => {
+      logPostView(stats);
 
-    // Don't count posts that dwell-end while the overlay is already showing
-    // (can happen if the user somehow triggers the observer during lock).
-    if (frictionActiveRef.current) return;
+      // Don't count posts that dwell-end while the overlay is already showing
+      // (can happen if the user somehow triggers the observer during lock).
+      if (frictionActiveRef.current) return;
 
-    postsSinceGateRef.current += 1;
+      postsSinceGateRef.current += 1;
 
-    if (postsSinceGateRef.current >= freqRef.current) {
-      postsSinceGateRef.current = 0;
-      frictionActiveRef.current = true;
-      frictionShownTsRef.current = Date.now();
-      // postsViewed count from store is fine for telemetry (logged async)
-      logFrictionShown({ frictionType: condition, triggerPostCount: postsViewed.length + 1 });
-      setShowFriction(true);
-    }
-  }, [logPostView, logFrictionShown, condition, postsViewed.length]);
+      if (postsSinceGateRef.current >= freqRef.current) {
+        postsSinceGateRef.current = 0;
+        frictionActiveRef.current = true;
+        if (!condition) setCurrentFriction(getRandomFriction());
+        frictionShownTsRef.current = Date.now();
+        // postsViewed count from store is fine for telemetry (logged async)
+        logFrictionShown({
+          frictionType: currentFriction,
+          triggerPostCount: postsViewed.length + 1,
+        });
+        setShowFriction(true);
+      }
+    },
+    [logPostView, logFrictionShown, currentFriction, postsViewed.length],
+  );
 
   // ── Infinite-load sentinel ─────────────────────────────────────────────────
   useEffect(() => {
@@ -106,7 +131,9 @@ export default function FrictionFeed({ posts, condition, frictionFrequency, onCo
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          setVisibleCount(prev => Math.min(prev + POSTS_PER_PAGE, posts.length));
+          setVisibleCount((prev) =>
+            Math.min(prev + POSTS_PER_PAGE, posts.length),
+          );
         }
       },
       { threshold: 0.1 },
@@ -117,30 +144,31 @@ export default function FrictionFeed({ posts, condition, frictionFrequency, onCo
 
   // ── End-of-feed completion ────────────────────────────────────────────────
   useEffect(() => {
-    if (!completedRef.current && visibleCount >= posts.length) {
+    if (!completedRef.current && postsViewed.length >= posts.length-2) {
       const timer = setTimeout(() => {
         if (!completedRef.current) {
           completedRef.current = true;
           onComplete?.();
         }
-      }, 3000);
+      }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [visibleCount, posts.length, onComplete]);
+    console.log(postsViewed.length)
+  }, [postsViewed.length, posts.length, onComplete]);
 
   // ── Lock / unlock scroll while friction is active ─────────────────────────
   useEffect(() => {
     const el = containerRef2.current;
     if (!el) return;
-    el.style.overflow     = showFriction ? 'hidden' : '';
-    el.style.pointerEvents = showFriction ? 'none'   : '';
+    el.style.overflow = showFriction ? "hidden" : "";
+    el.style.pointerEvents = showFriction ? "none" : "";
   }, [showFriction]);
 
   // ── Friction completion ────────────────────────────────────────────────────
   function handleFrictionComplete(action) {
     logFrictionDone({
-      frictionType: condition,
-      shownTs:      frictionShownTsRef.current,
+      frictionType: currentFriction,
+      shownTs: frictionShownTsRef.current,
       action,
     });
     frictionActiveRef.current = false;
@@ -148,12 +176,11 @@ export default function FrictionFeed({ posts, condition, frictionFrequency, onCo
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
-  const FrictionComp   = FRICTION_COMPONENT[condition] ?? null;
-  const visiblePosts   = posts.slice(0, visibleCount);
+  const FrictionComp = FRICTION_COMPONENT[currentFriction] ?? null;
+  const visiblePosts = posts.slice(0, visibleCount);
 
   return (
     <div className="relative phone-frame">
-
       {/* Scrollable feed — identical to InfiniteScrollFeed */}
       <div
         ref={setContainerRef}
@@ -168,7 +195,9 @@ export default function FrictionFeed({ posts, condition, frictionFrequency, onCo
             <div className="w-20 h-1 bg-gray-200 rounded-full overflow-hidden">
               <div
                 className="progress-bar rounded-full"
-                style={{ width: `${(postsViewed.length / posts.length) * 100}%` }}
+                style={{
+                  width: `${(postsViewed.length / posts.length) * 100}%`,
+                }}
               />
             </div>
             <span className="text-xs text-gray-400">
@@ -178,17 +207,16 @@ export default function FrictionFeed({ posts, condition, frictionFrequency, onCo
         </div>
 
         {/* Post stream */}
-        {visiblePosts.map(post => (
-          <PostCard
-            key={post.id}
-            post={post}
-            onDwellEnd={handleDwellEnd}
-          />
+        {visiblePosts.map((post) => (
+          <PostCard key={post.id} post={post} onDwellEnd={handleDwellEnd} />
         ))}
 
         {/* Infinite-load sentinel */}
         {visibleCount < posts.length && (
-          <div ref={sentinelRef} className="h-16 flex items-center justify-center">
+          <div
+            ref={sentinelRef}
+            className="h-16 flex items-center justify-center"
+          >
             <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
@@ -196,9 +224,18 @@ export default function FrictionFeed({ posts, condition, frictionFrequency, onCo
         {/* End-of-feed notice */}
         {visibleCount >= posts.length && (
           <div className="py-10 flex flex-col items-center gap-2 text-gray-400">
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                d="M5 13l4 4L19 7" />
+            <svg
+              className="w-8 h-8"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M5 13l4 4L19 7"
+              />
             </svg>
             <p className="text-sm font-medium">You've seen all posts</p>
             <p className="text-xs">Moving to the next step…</p>
@@ -209,7 +246,7 @@ export default function FrictionFeed({ posts, condition, frictionFrequency, onCo
       {/* Friction overlay — fixed on top, pointer-events restored so the
           overlay itself is still interactive even though the feed is locked */}
       {showFriction && FrictionComp && (
-        <div style={{ pointerEvents: 'auto' }}>
+        <div style={{ pointerEvents: "auto" }}>
           <FrictionComp onComplete={handleFrictionComplete} />
         </div>
       )}

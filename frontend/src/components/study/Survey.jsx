@@ -74,10 +74,10 @@ export default function Survey({ onSubmit }) {
     // Require all Likert items
     const required = [...GENERAL_QUESTIONS, ...(isControl ? [] : INTERFACE_QUESTIONS)];
     const missing  = required.filter(q => !surveyResponses[q.id]);
-    if (missing.length) {
-      setSubmitError('Please answer all questions before submitting.');
-      return;
-    }
+    // if (missing.length) {
+    //   setSubmitError('Please answer all questions before submitting.');
+    //   return;
+    // }
     setSurveyResponse('open_ended', openEnded);
     onSubmit({ ...surveyResponses, open_ended: openEnded });
   }
