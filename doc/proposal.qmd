@@ -1,15 +1,13 @@
 ---
 title: "Project Proposal"
+author:
+  - Chia Jia Jin "Shawn"
+  - TAN Wei Chien "Timothy"
+  - ZENG Tianzhi "Tony"
 bibliography: references.bib
 notice: |
   @{ruiz2024designfrictionssocialmedia}
 ---
-
-## Team Members
-
-- CHIA Jia Jin "Shawn"
-- TAN Wei Chien "Timothy"
-- ZENG Tianzhi "Tony"
 
 ## Target Paper
 

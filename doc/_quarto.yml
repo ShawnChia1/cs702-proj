@@ -16,8 +16,17 @@ format:
     code-fold: show
     code-tools: true
   pdf:
-    toc: true
+    toc: false
     documentclass: article
     colorlinks: true
     geometry:
-      - margin=1in
+      - margin=0.5in
+    linestretch: 1.0
+    include-in-header:
+      text: |
+        \usepackage{enumitem}
+        \setlist{nosep,leftmargin=*}
+        \usepackage{titling}
+        \setlength{\droptitle}{-3em}
+        \pretitle{\begin{center}\Large\bfseries}
+        \posttitle{\end{center}\vspace{-0.5em}}
