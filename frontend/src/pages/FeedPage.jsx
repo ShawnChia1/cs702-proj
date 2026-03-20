@@ -83,10 +83,12 @@ export default function FeedPage() {
   // Reaction condition uses frictionFrequency=1 (gate after every post).
   if (condition === 'control') {
     return (
-      <InfiniteScrollFeed
-        posts={EXPOSURE_POSTS}
-        onComplete={handleComplete}
-      />
+      <div className="phone-frame">
+        <InfiniteScrollFeed
+          posts={EXPOSURE_POSTS}
+          onComplete={handleComplete}
+        />
+      </div>
     );
   }
 

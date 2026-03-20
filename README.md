@@ -26,6 +26,28 @@ http://localhost:5173/?condition=reaction&freq=5
 
 ---
 
+## Full Stack (frontend + backend + database)
+
+Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) to be running.
+
+```bash
+# from the project root (cs702-proj/)
+cp .env.example .env        # only needed first time
+docker compose up --build
+```
+
+| Service  | URL |
+|---|---|
+| Frontend | http://localhost:5173 |
+| Backend API | http://localhost:4000/api |
+| PostgreSQL | localhost:5432 |
+
+To stop everything: `Ctrl+C`, then `docker compose down`.
+
+To wipe the database and start fresh: `docker compose down -v`.
+
+---
+
 ## Study Conditions
 
 The study uses a **between-subjects design**: each participant is assigned to exactly one condition. Condition assignment is controlled via URL params so the researcher can counterbalance across participants.
