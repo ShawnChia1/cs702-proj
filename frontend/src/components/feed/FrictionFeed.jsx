@@ -2,12 +2,11 @@
  * FrictionFeed.jsx — Intervention conditions
  *
  * Identical to InfiniteScrollFeed in every way EXCEPT:
- *   – After every N posts are scrolled past, a blocking overlay (the friction
- *     component) appears on top of the feed.
- *   – While the overlay is visible, the scroll container is locked so the
- *     user cannot continue until the interaction is completed.
- *   – Once the user finishes the friction interaction, the overlay dismisses
- *     and scrolling resumes normally.
+ *   – Most intervention conditions show a blocking overlay after every N posts.
+ *   – The slowdown condition does not block; it temporarily dampens scroll
+ *     input once the user has skimmed enough posts and is still scrolling fast.
+ *   – Modal conditions lock the scroll container until the interaction is
+ *     completed, then dismiss and resume normal scrolling.
  *
  * This ensures the only difference between control and intervention groups
  * is the friction mechanism — not the feed format.
@@ -16,6 +15,8 @@
  * ──────────────────
  *  frictionFrequency = 1  → gate after every single post  (reaction condition)
  *  frictionFrequency = 5  → gate after every 5th post     (default)
+ *                           or, for slowdown, allow rapid-scroll damping
+ *                           once at least 5 posts have been skimmed
  *  etc.
  *
  * Gate trigger
@@ -34,10 +35,14 @@ import ButtonToggleFriction from "../friction/ButtonToggleFriction";
 import ContentFeedbackFriction from "../friction/ContentFeedbackFriction";
 import PauseScreenFriction from "../friction/PauseScreenFriction";
 import MiniGameFriction from "../friction/MiniGameFriction";
-import useSessionStore, { assignCondition } from "../../store/sessionStore";
+import ScrollSlowdownFriction from "../friction/ScrollSlowdownFriction";
+import useSessionStore from "../../store/sessionStore";
 import useScrollTracker from "../../hooks/useScrollTracker";
 
 const POSTS_PER_PAGE = 5;
+const SLOWDOWN_DURATION_MS = 4000;
+const SLOWDOWN_FACTOR = 0.35;
+const SLOWDOWN_VELOCITY_THRESHOLD = 1.1;
 
 const FRICTION_COMPONENT = {
   reaction: ReactionFriction,
@@ -69,16 +74,21 @@ export default function FrictionFeed({
   const [visibleCount, setVisibleCount] = useState(POSTS_PER_PAGE);
   const [showFriction, setShowFriction] = useState(false);
   const [currentFriction, setCurrentFriction] = useState(condition);
+  const [slowdownRemainingMs, setSlowdownRemainingMs] = useState(0);
 
   const sentinelRef = useRef(null);
   const completedRef = useRef(false);
   const frictionShownTsRef = useRef(null);
   const containerRef2 = useRef(null); // for locking scroll
+  const slowdownTimerRef = useRef(null);
+  const slowdownTickRef = useRef(null);
+  const slowdownActiveRef = useRef(false);
+  const latestScrollRef = useRef({ direction: "down", velocityPx: 0 });
 
   // Ref-counter gate: counts posts viewed since the last friction gate.
   // Lives entirely in refs so it is never stale inside callbacks.
   const postsSinceGateRef = useRef(0);
-  const frictionActiveRef = useRef(false); // mirrors showFriction for use in callbacks
+  const frictionActiveRef = useRef(false); // mirrors modal overlays for use in callbacks
 
   // Keep frictionFrequency accessible inside the dwell callback without
   // re-creating the callback every time the prop changes.
@@ -87,8 +97,72 @@ export default function FrictionFeed({
     freqRef.current = frictionFrequency;
   }, [frictionFrequency]);
 
+  const isSlowdownCondition = condition === "slowdown";
+  const slowdownVisible = isSlowdownCondition && slowdownRemainingMs > 0;
+
+  const clearSlowdownTimers = useCallback(() => {
+    if (slowdownTimerRef.current) {
+      clearTimeout(slowdownTimerRef.current);
+      slowdownTimerRef.current = null;
+    }
+    if (slowdownTickRef.current) {
+      clearInterval(slowdownTickRef.current);
+      slowdownTickRef.current = null;
+    }
+  }, []);
+
+  const finishSlowdown = useCallback(
+    (action = "slowdown_elapsed") => {
+      clearSlowdownTimers();
+      if (!slowdownActiveRef.current || !frictionShownTsRef.current) return;
+
+      logFrictionDone({
+        frictionType: condition,
+        shownTs: frictionShownTsRef.current,
+        action,
+      });
+      frictionShownTsRef.current = null;
+      slowdownActiveRef.current = false;
+      setSlowdownRemainingMs(0);
+    },
+    [clearSlowdownTimers, condition, logFrictionDone],
+  );
+
+  const activateSlowdown = useCallback(() => {
+    if (slowdownActiveRef.current) return;
+
+    postsSinceGateRef.current = 0;
+    frictionShownTsRef.current = Date.now();
+    slowdownActiveRef.current = true;
+    setSlowdownRemainingMs(SLOWDOWN_DURATION_MS);
+    logFrictionShown({
+      frictionType: condition,
+      triggerPostIndex: postsViewed.length + 1,
+    });
+
+    clearSlowdownTimers();
+    slowdownTickRef.current = setInterval(() => {
+      setSlowdownRemainingMs(
+        Math.max(0, SLOWDOWN_DURATION_MS - (Date.now() - frictionShownTsRef.current)),
+      );
+    }, 100);
+    slowdownTimerRef.current = setTimeout(
+      () => finishSlowdown(),
+      SLOWDOWN_DURATION_MS,
+    );
+  }, [
+    clearSlowdownTimers,
+    condition,
+    finishSlowdown,
+    logFrictionShown,
+    postsViewed.length,
+  ]);
+
   // ── Scroll telemetry ───────────────────────────────────────────────────────
-  const handleScroll = useCallback((data) => logScroll(data), [logScroll]);
+  const handleScroll = useCallback((data) => {
+    latestScrollRef.current = data;
+    logScroll(data);
+  }, [logScroll]);
   const scrollRef = useScrollTracker(handleScroll);
 
   // Merge both refs onto the same container div
@@ -101,6 +175,22 @@ export default function FrictionFeed({
   const handleDwellEnd = useCallback(
     (stats) => {
       logPostView(stats);
+
+      if (isSlowdownCondition) {
+        if (slowdownActiveRef.current) return;
+
+        postsSinceGateRef.current += 1;
+        const latestScroll = latestScrollRef.current;
+        const hasBrowsedEnoughPosts = postsSinceGateRef.current >= freqRef.current;
+        const isScrollingFast =
+          latestScroll.direction === "down"
+          && latestScroll.velocityPx >= SLOWDOWN_VELOCITY_THRESHOLD;
+
+        if (hasBrowsedEnoughPosts && isScrollingFast) {
+          activateSlowdown();
+        }
+        return;
+      }
 
       // Don't count posts that dwell-end while the overlay is already showing
       // (can happen if the user somehow triggers the observer during lock).
@@ -116,12 +206,20 @@ export default function FrictionFeed({
         // postsViewed count from store is fine for telemetry (logged async)
         logFrictionShown({
           frictionType: currentFriction,
-          triggerPostCount: postsViewed.length + 1,
+          triggerPostIndex: postsViewed.length + 1,
         });
         setShowFriction(true);
       }
     },
-    [logPostView, logFrictionShown, currentFriction, postsViewed.length],
+    [
+      activateSlowdown,
+      condition,
+      currentFriction,
+      isSlowdownCondition,
+      logFrictionShown,
+      logPostView,
+      postsViewed.length,
+    ],
   );
 
   // ── Infinite-load sentinel ─────────────────────────────────────────────────
@@ -153,16 +251,117 @@ export default function FrictionFeed({
       }, 1000);
       return () => clearTimeout(timer);
     }
-    console.log(postsViewed.length)
   }, [postsViewed.length, posts.length, onComplete]);
 
   // ── Lock / unlock scroll while friction is active ─────────────────────────
   useEffect(() => {
+    if (isSlowdownCondition) return;
+
     const el = containerRef2.current;
     if (!el) return;
     el.style.overflow = showFriction ? "hidden" : "";
     el.style.pointerEvents = showFriction ? "none" : "";
-  }, [showFriction]);
+  }, [isSlowdownCondition, showFriction]);
+
+  // ── Slow scrolling input while slowdown friction is active ────────────────
+  useEffect(() => {
+    const el = containerRef2.current;
+    if (!el || !isSlowdownCondition) return;
+
+    let lastTouchY = null;
+    let isProgrammaticScroll = false;
+    let lastObservedScrollTop = el.scrollTop;
+
+    const syncScrollTop = (nextScrollTop) => {
+      isProgrammaticScroll = true;
+      el.scrollTop = Math.max(0, nextScrollTop);
+      requestAnimationFrame(() => {
+        lastObservedScrollTop = el.scrollTop;
+        isProgrammaticScroll = false;
+      });
+    };
+
+    const applyDelta = (delta) => {
+      if (Math.abs(delta) < 0.5) return;
+      const factor = delta > 0 ? SLOWDOWN_FACTOR : 1;
+      syncScrollTop(el.scrollTop + (delta * factor));
+    };
+
+    const handleWheel = (event) => {
+      if (!slowdownActiveRef.current || event.deltaY <= 0) return;
+      event.preventDefault();
+      applyDelta(event.deltaY);
+    };
+
+    const handleTouchStart = (event) => {
+      lastTouchY = event.touches[0]?.clientY ?? null;
+    };
+
+    const handleTouchMove = (event) => {
+      const currentY = event.touches[0]?.clientY;
+      if (currentY == null) return;
+      if (lastTouchY == null) {
+        lastTouchY = currentY;
+        return;
+      }
+
+      const delta = lastTouchY - currentY;
+      if (slowdownActiveRef.current && delta > 0) {
+        event.preventDefault();
+        applyDelta(delta);
+      }
+      lastTouchY = currentY;
+    };
+
+    const handleTouchEnd = () => {
+      lastTouchY = null;
+    };
+
+    const handleNativeScroll = () => {
+      if (isProgrammaticScroll) {
+        lastObservedScrollTop = el.scrollTop;
+        return;
+      }
+      if (!slowdownActiveRef.current) {
+        lastObservedScrollTop = el.scrollTop;
+        return;
+      }
+
+      const delta = el.scrollTop - lastObservedScrollTop;
+      if (delta > 0) {
+        syncScrollTop(lastObservedScrollTop + (delta * SLOWDOWN_FACTOR));
+        return;
+      }
+      lastObservedScrollTop = el.scrollTop;
+    };
+
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    el.addEventListener("touchstart", handleTouchStart, { passive: true });
+    el.addEventListener("touchmove", handleTouchMove, { passive: false });
+    el.addEventListener("touchend", handleTouchEnd, { passive: true });
+    el.addEventListener("scroll", handleNativeScroll, { passive: true });
+
+    return () => {
+      el.removeEventListener("wheel", handleWheel);
+      el.removeEventListener("touchstart", handleTouchStart);
+      el.removeEventListener("touchmove", handleTouchMove);
+      el.removeEventListener("touchend", handleTouchEnd);
+      el.removeEventListener("scroll", handleNativeScroll);
+    };
+  }, [isSlowdownCondition]);
+
+  useEffect(() => () => {
+    clearSlowdownTimers();
+    if (!slowdownActiveRef.current || !frictionShownTsRef.current) return;
+
+    logFrictionDone({
+      frictionType: condition,
+      shownTs: frictionShownTsRef.current,
+      action: "feed_unmounted",
+    });
+    frictionShownTsRef.current = null;
+    slowdownActiveRef.current = false;
+  }, [clearSlowdownTimers, condition, logFrictionDone]);
 
   // ── Friction completion ────────────────────────────────────────────────────
   function handleFrictionComplete(action) {
@@ -187,6 +386,7 @@ export default function FrictionFeed({
         className="feed-container"
         role="feed"
         aria-label="Social media feed"
+        style={slowdownVisible ? { touchAction: "none" } : undefined}
       >
         {/* Progress bar */}
         <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm border-b border-gray-100 px-4 py-2 flex items-center justify-between">
@@ -249,6 +449,13 @@ export default function FrictionFeed({
         <div style={{ pointerEvents: "auto" }}>
           <FrictionComp onComplete={handleFrictionComplete} />
         </div>
+      )}
+
+      {slowdownVisible && (
+        <ScrollSlowdownFriction
+          remainingMs={slowdownRemainingMs}
+          totalMs={SLOWDOWN_DURATION_MS}
+        />
       )}
     </div>
   );

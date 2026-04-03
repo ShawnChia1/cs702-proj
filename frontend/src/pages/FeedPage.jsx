@@ -32,6 +32,10 @@ export default function FeedPage() {
     setPhase('memory');
   }
 
+  const frictionInstructions = condition === 'slowdown'
+    ? 'This feed may temporarily resist fast scrolling if you move through too many posts too quickly.'
+    : 'This feed includes occasional short interactions. Follow the on-screen prompts when they appear to continue browsing.';
+
   // ── Instructions screen ────────────────────────────────────────────────────
   if (step === 'instructions') {
     return (
@@ -54,8 +58,7 @@ export default function FeedPage() {
             <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
               <p className="font-medium text-yellow-800 mb-1">Note</p>
               <p className="text-yellow-700 text-xs">
-                This feed includes occasional short interactions. Follow the on-screen
-                prompts when they appear to continue browsing.
+                {frictionInstructions}
               </p>
             </div>
           )}
@@ -79,7 +82,8 @@ export default function FeedPage() {
 
   // ── Feed ──────────────────────────────────────────────────────────────────
   // Control: pure infinite scroll, no gates.
-  // All friction conditions: same infinite scroll base + blocking overlay.
+  // All friction conditions: same infinite scroll base, with either a modal
+  // gate or adaptive slowdown layered on top.
   // Reaction condition uses frictionFrequency=1 (gate after every post).
   if (condition === 'control') {
     return (

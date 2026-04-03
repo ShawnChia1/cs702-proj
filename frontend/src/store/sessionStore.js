@@ -12,6 +12,7 @@
  *    'feedback'     → soft friction: quick 2-point content rating
  *    'pause'        → soft friction: 7-second reflective pause with quote
  *    'minigame'     → soft friction: brief tap-target mini-game
+ *    'slowdown'     → adaptive friction: temporarily slows fast scrolling after bursty browsing
  *
  *  frictionFrequency: every N posts (3 | 5 | 10 | 15)  — ignored for 'control'
  *
@@ -29,7 +30,7 @@ import { create } from 'zustand';
 
 // ── Condition helpers ────────────────────────────────────────────────────────
 
-export const CONDITIONS = ['control', 'reaction', 'button', 'feedback', 'pause', 'minigame'];
+export const CONDITIONS = ['control', 'reaction', 'button', 'feedback', 'pause', 'minigame', 'slowdown'];
 export const FRICTION_CONDITIONS = CONDITIONS.filter(c => c !== 'control');
 export const FRICTION_FREQUENCIES = [3, 5, 10, 15];
 

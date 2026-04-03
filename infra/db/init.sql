@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS sessions (
     id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     participant_id       TEXT NOT NULL,
-    condition            TEXT NOT NULL CHECK (condition IN ('control','reaction','button','feedback','pause','minigame')),
+    condition            TEXT NOT NULL CHECK (condition IN ('control','reaction','button','feedback','pause','minigame','slowdown')),
     friction_frequency   INTEGER,
     created_at           TIMESTAMPTZ DEFAULT NOW(),
     feed_started_at      TIMESTAMPTZ,

@@ -14,7 +14,7 @@
  */
 
 import React, { useEffect } from 'react';
-import useSessionStore, { CONDITIONS, assignCondition } from './store/sessionStore';
+import useSessionStore, { CONDITIONS } from './store/sessionStore';
 
 import ConsentForm      from './components/study/ConsentForm';
 import DemographicsForm from './components/study/DemographicsForm';
@@ -38,7 +38,7 @@ function DevBadge({ condition, phase }) {
 export default function App() {
   const {
     phase, condition, setPhase, setCondition, setDemographics, setParticipantId,
-    setSessionId, getTelemetrySummary,
+    setSessionId,
   } = useSessionStore();
 
   // ── Condition assignment from URL or random ─────────────────────────────
