@@ -40,7 +40,7 @@ import useSessionStore from "../../store/sessionStore";
 import useScrollTracker from "../../hooks/useScrollTracker";
 
 const POSTS_PER_PAGE = 5;
-const SLOWDOWN_DURATION_MS = 4000;
+const SLOWDOWN_DURATION_MS = 2500;
 const SLOWDOWN_FACTOR = 0.35;
 const SLOWDOWN_VELOCITY_THRESHOLD = 1.1;
 

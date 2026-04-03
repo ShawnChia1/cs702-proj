@@ -60,8 +60,40 @@ app.post('/api/sessions', async (req, res) => {
   try {
     const { condition, frictionFrequency, demographics } = req.body;
 
+    const allowedConditions = new Set([
+      'control',
+      'reaction',
+      'button',
+      'feedback',
+      'pause',
+      'minigame',
+      'slowdown',
+    ]);
+
+    if (!condition || typeof condition !== 'string') {
+      return badRequest(res, 'condition is required');
+    }
+
+    const normalizedCondition = condition.trim().toLowerCase();
+
+    if (!allowedConditions.has(normalizedCondition)) {
+      return badRequest(
+        res,
+        `invalid condition "${condition}". Allowed: ${[...allowedConditions].join(', ')}`
+      );
+    }
+
+    if (
+      frictionFrequency !== undefined &&
+      frictionFrequency !== null &&
+      !Number.isInteger(frictionFrequency)
+    ) {
+      return badRequest(res, 'frictionFrequency must be an integer or null');
+    }
+
     const participantId = `P${uuidv4().slice(0, 8).toUpperCase()}`;
     const sessionId = uuidv4();
+    const nowIso = new Date().toISOString();
 
     const { error: sessionError } = await supabase
       .from('sessions')
@@ -69,14 +101,20 @@ app.post('/api/sessions', async (req, res) => {
         {
           id: sessionId,
           participant_id: participantId,
-          condition,
+          condition: normalizedCondition,
           friction_frequency: frictionFrequency ?? null,
+          created_at: nowIso,
+          feed_started_at: nowIso,
         },
       ]);
 
     if (sessionError) {
       console.error('create session error:', sessionError);
-      return res.status(500).json({ error: sessionError.message });
+      return res.status(500).json({
+        error: sessionError.message,
+        details: sessionError.details ?? null,
+        code: sessionError.code ?? null,
+      });
     }
 
     if (demographics) {
@@ -85,24 +123,32 @@ app.post('/api/sessions', async (req, res) => {
         .insert([
           {
             session_id: sessionId,
-            age: demographics.age,
-            gender: demographics.gender,
-            social_media_usage: demographics.socialMediaUsage,
+            age: demographics.age ?? null,
+            gender: demographics.gender ?? null,
+            social_media_usage: demographics.socialMediaUsage ?? null,
             platforms_used: demographics.platformsUsed ?? [],
           },
         ]);
 
       if (demoError) {
         console.error('insert demographics error:', demoError);
-        return res.status(500).json({ error: demoError.message });
+
+        // rollback session if demographics insert fails
+        await supabase.from('sessions').delete().eq('id', sessionId);
+
+        return res.status(500).json({
+          error: demoError.message,
+          details: demoError.details ?? null,
+          code: demoError.code ?? null,
+        });
       }
     }
 
     res.status(201).json({
       sessionId,
       participantId,
-      condition,
-      frictionFrequency,
+      condition: normalizedCondition,
+      frictionFrequency: frictionFrequency ?? null,
     });
   } catch (err) {
     console.error('POST /api/sessions failed:', err);
@@ -127,6 +173,8 @@ app.post('/api/sessions/:id/events', async (req, res) => {
     for (const ev of events) {
       const { type, _ts, payload = {} } = ev;
 
+      if (!type) continue;
+
       rawEventRows.push({
         session_id: id,
         type,
@@ -135,48 +183,76 @@ app.post('/api/sessions/:id/events', async (req, res) => {
       });
 
       if (type === 'post_view') {
-        postViewRows.push({
-          session_id: id,
-          post_id: payload.postId,
-          category: payload.category ?? null,
-          start_ts: payload.startTs ? new Date(payload.startTs).toISOString() : null,
-          end_ts: payload.endTs ? new Date(payload.endTs).toISOString() : null,
-          dwell_ms: payload.dwellMs ?? null,
-          scroll_depth: payload.scrollDepth ?? null,
-        });
+        if (!payload.postId) {
+          console.warn('Skipping post_view without postId:', payload);
+        } else {
+          postViewRows.push({
+            session_id: id,
+            post_id: String(payload.postId),
+            category: payload.category ?? null,
+            start_ts: payload.startTs ? new Date(payload.startTs).toISOString() : null,
+            end_ts: payload.endTs ? new Date(payload.endTs).toISOString() : null,
+            dwell_ms: Number.isFinite(payload.dwellMs) ? Math.round(payload.dwellMs) : 0,
+            scroll_depth: typeof payload.scrollDepth === 'number' ? payload.scrollDepth : null,
+          });
+        }
       }
 
       if (type === 'friction_done') {
-        frictionRows.push({
-          session_id: id,
-          friction_type: payload.frictionType,
-          trigger_index: payload.triggerPostIndex ?? null,
-          duration_ms: payload.durationMs ?? null,
-          action: payload.action ?? null,
-          shown_at: new Date().toISOString(),
-        });
+        console.log('friction_done payload:', JSON.stringify(payload, null, 2));
+        const frictionType =
+          payload.frictionType ??
+          payload.friction_type ??
+          payload.type ??
+          payload.condition ??
+          null;
+
+        if (!frictionType) {
+          console.warn('Skipping friction_done without frictionType:', payload);
+        } else {
+          frictionRows.push({
+            session_id: id,
+            friction_type: String(frictionType),
+            trigger_index: Number.isInteger(payload.triggerPostIndex)
+              ? payload.triggerPostIndex
+              : (Number.isInteger(payload.trigger_index) ? payload.trigger_index : null),
+            duration_ms: Number.isFinite(payload.durationMs)
+              ? Math.round(payload.durationMs)
+              : (Number.isFinite(payload.duration_ms) ? Math.round(payload.duration_ms) : null),
+            action: payload.action ?? null,
+            shown_at: payload.shownAt
+              ? new Date(payload.shownAt).toISOString()
+              : (payload.shown_at
+                  ? new Date(payload.shown_at).toISOString()
+                  : (_ts ? new Date(_ts).toISOString() : new Date().toISOString())),
+          });
+        }
       }
     }
 
     const { error: rawError } = await insertMany('events', rawEventRows);
     if (rawError) {
       console.error('insert events error:', rawError);
-      return res.status(500).json({ error: rawError.message });
+      return res.status(500).json({ where: 'events', error: rawError.message, details: rawError.details ?? null });
     }
 
     const { error: viewError } = await insertMany('post_views', postViewRows);
     if (viewError) {
       console.error('insert post_views error:', viewError);
-      return res.status(500).json({ error: viewError.message });
+      return res.status(500).json({ where: 'post_views', error: viewError.message, details: viewError.details ?? null });
     }
 
     const { error: frictionError } = await insertMany('friction_events', frictionRows);
     if (frictionError) {
       console.error('insert friction_events error:', frictionError);
-      return res.status(500).json({ error: frictionError.message });
+      return res.status(500).json({ where: 'friction_events', error: frictionError.message, details: frictionError.details ?? null });
     }
 
-    res.json({ inserted: events.length });
+    res.json({
+      insertedRawEvents: rawEventRows.length,
+      insertedPostViews: postViewRows.length,
+      insertedFrictionEvents: frictionRows.length,
+    });
   } catch (err) {
     console.error('POST /api/sessions/:id/events failed:', err);
     res.status(500).json({ error: err.message });
@@ -193,43 +269,66 @@ app.post('/api/sessions/:id/memory', async (req, res) => {
       return badRequest(res, 'responses must be an array');
     }
 
-    const rows = responses.map((r) => ({
-      session_id: id,
-      post_id: r.postId,
-      memory_label: r.memoryLabel,
-      participant_answer: r.participantAnswer,
-      correct: r.correct,
-      rt_ms: r.rtMs,
-      category: r.category ?? null,
-    }));
+    const rows = [];
+
+    for (const r of responses) {
+      const memoryLabel = String(r.memoryLabel ?? '').trim().toLowerCase();
+      const participantAnswer = String(r.participantAnswer ?? '').trim().toLowerCase();
+
+      if (!['old', 'new'].includes(memoryLabel)) {
+        console.warn('Skipping invalid memoryLabel:', r);
+        continue;
+      }
+
+      if (!['old', 'new'].includes(participantAnswer)) {
+        console.warn('Skipping invalid participantAnswer:', r);
+        continue;
+      }
+
+      rows.push({
+        session_id: id,
+        post_id: String(r.postId ?? ''),
+        memory_label: memoryLabel,
+        participant_answer: participantAnswer,
+        correct: Boolean(r.correct),
+        rt_ms: Number.isFinite(r.rtMs) ? Math.round(r.rtMs) : null,
+        category: r.category ?? null,
+      });
+    }
+
+    if (rows.length === 0) {
+      return res.json({ inserted: 0 });
+    }
 
     const { error: insertError } = await insertMany('memory_responses', rows);
     if (insertError) {
       console.error('insert memory_responses error:', insertError);
-      return res.status(500).json({ error: insertError.message });
+      return res.status(500).json({
+        where: 'memory_responses',
+        error: insertError.message,
+        details: insertError.details ?? null,
+      });
     }
 
-    const hits = responses.filter((r) => r.memoryLabel === 'old' && r.correct).length;
-    const fas = responses.filter((r) => r.memoryLabel === 'new' && !r.correct).length;
-    const oldN = responses.filter((r) => r.memoryLabel === 'old').length;
-    const newN = responses.filter((r) => r.memoryLabel === 'new').length;
+    const hits = rows.filter((r) => r.memory_label === 'old' && r.correct).length;
+    const fas = rows.filter((r) => r.memory_label === 'new' && !r.correct).length;
+    const oldN = rows.filter((r) => r.memory_label === 'old').length;
+    const newN = rows.filter((r) => r.memory_label === 'new').length;
 
-    if (oldN > 0 || newN > 0) {
-      const { error: updateError } = await supabase
-        .from('sessions')
-        .update({
-          memory_hit_rate: oldN ? hits / oldN : null,
-          memory_fa_rate: newN ? fas / newN : null,
-        })
-        .eq('id', id);
+    const { error: updateError } = await supabase
+      .from('sessions')
+      .update({
+        memory_hit_rate: oldN ? hits / oldN : null,
+        memory_fa_rate: newN ? fas / newN : null,
+      })
+      .eq('id', id);
 
-      if (updateError) {
-        console.error('update sessions memory stats error:', updateError);
-        return res.status(500).json({ error: updateError.message });
-      }
+    if (updateError) {
+      console.error('update sessions memory stats error:', updateError);
+      return res.status(500).json({ error: updateError.message });
     }
 
-    res.json({ inserted: responses.length });
+    res.json({ inserted: rows.length });
   } catch (err) {
     console.error('POST /api/sessions/:id/memory failed:', err);
     res.status(500).json({ error: err.message });
@@ -242,28 +341,42 @@ app.post('/api/sessions/:id/survey', async (req, res) => {
     const { id } = req.params;
     const { responses = {} } = req.body;
 
-    const rows = Object.entries(responses).map(([qId, val]) => ({
-      session_id: id,
-      question_id: qId,
-      value: String(val),
-    }));
+    let rows = [];
+
+    if (Array.isArray(responses)) {
+      rows = responses
+        .filter((r) => r && r.question_id)
+        .map((r) => ({
+          session_id: id,
+          question_id: String(r.question_id),
+          value: r.value == null ? null : String(r.value),
+        }));
+    } else {
+      rows = Object.entries(responses).map(([qId, val]) => ({
+        session_id: id,
+        question_id: qId,
+        value: val == null ? null : String(val),
+      }));
+    }
 
     if (rows.length === 0) {
-      return res.json({ ok: true });
+      return res.json({ ok: true, inserted: 0 });
     }
 
     const { error } = await supabase
       .from('survey_responses')
-      .upsert(rows, {
-        onConflict: 'session_id,question_id',
-      });
+      .upsert(rows, { onConflict: 'session_id,question_id' });
 
     if (error) {
       console.error('upsert survey_responses error:', error);
-      return res.status(500).json({ error: error.message });
+      return res.status(500).json({
+        where: 'survey_responses',
+        error: error.message,
+        details: error.details ?? null,
+      });
     }
 
-    res.json({ ok: true });
+    res.json({ ok: true, inserted: rows.length });
   } catch (err) {
     console.error('POST /api/sessions/:id/survey failed:', err);
     res.status(500).json({ error: err.message });
@@ -293,13 +406,22 @@ app.post('/api/sessions/:id/submit', async (req, res) => {
       }
     }
 
+    const feedEndedAt = new Date().toISOString();
+
+    const updatePayload = {
+      feed_duration_ms: summary.feedDurationMs ?? null,
+      post_count: summary.postCount ?? null,
+      feed_ended_at: feedEndedAt,
+      completed_at: feedEndedAt,
+    };
+
+    if (summary.feedStartedAt) {
+      updatePayload.feed_started_at = new Date(summary.feedStartedAt).toISOString();
+    }
+
     const { error: updateError } = await supabase
       .from('sessions')
-      .update({
-        feed_duration_ms: summary.feedDurationMs,
-        post_count: summary.postCount,
-        completed_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq('id', id);
 
     if (updateError) {

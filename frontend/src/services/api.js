@@ -25,7 +25,11 @@ async function request(method, path, body) {
 // ── Sessions ─────────────────────────────────────────────────────────────────
 
 /** Create a new study session. Returns { sessionId, participantId, condition, frictionFrequency } */
-export const createSession = (payload) => request('POST', '/sessions', payload);
+export const createSession = (payload) =>
+  request('POST', '/sessions', {
+    ...payload,
+    condition: payload.condition?.trim().toLowerCase(),
+  });
 
 /** Mark session as complete and upload all telemetry in one shot. */
 export const submitSession = (sessionId, payload) =>

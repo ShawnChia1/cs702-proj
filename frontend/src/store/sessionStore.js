@@ -116,8 +116,17 @@ const useSessionStore = create((set, get) => ({
 
   // ── Telemetry ──────────────────────────────────────────────────────────────
 
-  logEvent: (event) =>
-    set(s => ({ events: [...s.events, { ...event, _ts: Date.now() }] })),
+  logEvent: ({ type, ...payload }) =>
+    set(s => ({
+      events: [
+        ...s.events,
+        {
+          type,
+          payload,
+          _ts: Date.now(),
+        },
+      ],
+    })),
 
   logPostView: ({ postId, startTs, endTs, scrollDepth = 1.0 }) => {
     const dwellMs = endTs - startTs;

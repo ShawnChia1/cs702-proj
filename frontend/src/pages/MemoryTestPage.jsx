@@ -4,11 +4,11 @@
  * Shows a Stroop-task distractor (to reduce recency bias), then the memory test.
  * Calls onComplete to advance phase to 'survey'.
  */
-
 import React, { useState, useEffect, useRef } from "react";
 import MemoryTest from "../components/study/MemoryTest";
 import { buildMemoryTestPool } from "../data/posts";
 import useSessionStore from "../store/sessionStore";
+import api from "../services/api";
 
 // ── Stroop task ────────────────────────────────────────────────────────────────
 const STROOP_ITEMS = [
@@ -110,19 +110,25 @@ function StroopTask({ onDone }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function MemoryTestPage() {
-  const { postsViewed, setMemoryTestPool, setPhase, submitMemoryResponses } =
-    useSessionStore();
-  const [step, setStep] = useState("stroop"); // 'stroop' | 'test'
+  const { sessionId, postsViewed, setMemoryTestPool, setPhase } = useSessionStore();
+  const [step, setStep] = useState("stroop");
 
   function handleStroopDone() {
-    // Build the memory test pool now, after the distractor task
     const pool = buildMemoryTestPool(postsViewed);
     setMemoryTestPool(pool);
     setStep("test");
   }
 
-  function handleTestComplete(responses) {
-    setPhase("survey");
+  async function handleTestComplete(responses) {
+    try {
+      if (sessionId) {
+        await api.submitMemoryTest(sessionId, responses);
+      }
+      setPhase("survey");
+    } catch (err) {
+      console.error("submitMemoryTest failed:", err);
+      setPhase("survey");
+    }
   }
 
   if (step === "stroop") {
