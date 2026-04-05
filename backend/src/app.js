@@ -413,6 +413,7 @@ app.post('/api/sessions/:id/submit', async (req, res) => {
       post_count: summary.postCount ?? null,
       feed_ended_at: feedEndedAt,
       completed_at: feedEndedAt,
+      status: 'completed',
     };
 
     if (summary.feedStartedAt) {
@@ -466,6 +467,42 @@ app.get('/api/sessions', async (_req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('GET /api/sessions failed:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// mark abandoned — bulk-update all in_progress sessions
+app.post('/api/sessions/mark-abandoned', async (_req, res) => {
+  try {
+    const { data: stale, error: fetchError } = await supabase
+      .from('sessions')
+      .select('id')
+      .eq('status', 'in_progress');
+
+    if (fetchError) {
+      console.error('fetch in_progress sessions error:', fetchError);
+      return res.status(500).json({ error: fetchError.message });
+    }
+
+    const sessionIds = (stale || []).map((s) => s.id);
+
+    if (sessionIds.length === 0) {
+      return res.json({ marked: 0, sessionIds: [] });
+    }
+
+    const { error: updateError } = await supabase
+      .from('sessions')
+      .update({ status: 'abandoned' })
+      .in('id', sessionIds);
+
+    if (updateError) {
+      console.error('mark abandoned error:', updateError);
+      return res.status(500).json({ error: updateError.message });
+    }
+
+    res.json({ marked: sessionIds.length, sessionIds });
+  } catch (err) {
+    console.error('POST /api/sessions/mark-abandoned failed:', err);
     res.status(500).json({ error: err.message });
   }
 });

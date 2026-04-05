@@ -193,6 +193,38 @@ Once the backend is running, each session is stored in PostgreSQL under a random
 
 ---
 
+## Session Status
+
+Each session has a `status` field that tracks its lifecycle:
+
+| Status | Meaning | Set by |
+|---|---|---|
+| `in_progress` | Participant started but hasn't finished | Automatic (database default on session creation) |
+| `completed` | Participant completed the full study flow | Automatic (backend, on final submit) |
+| `abandoned` | Participant dropped out before completing | Manual (researcher, after data collection) |
+
+### Marking abandoned sessions
+
+After data collection is finished, mark all incomplete sessions as abandoned:
+
+```bash
+curl -X POST http://localhost:4000/api/sessions/mark-abandoned
+```
+
+This updates every session still in `in_progress` to `abandoned` and returns the count and IDs of affected sessions:
+
+```json
+{ "marked": 2, "sessionIds": ["uuid-1", "uuid-2"] }
+```
+
+When analysing results, filter to completed sessions only:
+
+```sql
+SELECT * FROM sessions WHERE status = 'completed';
+```
+
+---
+
 ## Project Structure
 
 ```

@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- Memory test aggregate metrics (d' components)
     memory_hit_rate      REAL,
     memory_fa_rate       REAL,
-    completed_at         TIMESTAMPTZ
+    completed_at         TIMESTAMPTZ,
+    status               TEXT NOT NULL DEFAULT 'in_progress' CHECK (status IN ('in_progress', 'completed', 'abandoned'))
 );
 
 -- ── Demographics ──────────────────────────────────────────────────────────────
