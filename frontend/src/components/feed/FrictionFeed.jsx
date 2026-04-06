@@ -117,6 +117,13 @@ export default function FrictionFeed({
       clearSlowdownTimers();
       if (!slowdownActiveRef.current || !frictionShownTsRef.current) return;
 
+      // Restore native scrolling
+      const el = containerRef2.current;
+      if (el) {
+        el.style.overflow = "";
+        el.style.overscrollBehavior = "";
+      }
+
       logFrictionDone({
         frictionType: condition,
         shownTs: frictionShownTsRef.current,
@@ -131,6 +138,13 @@ export default function FrictionFeed({
 
   const activateSlowdown = useCallback(() => {
     if (slowdownActiveRef.current) return;
+
+    // Suppress native scrolling (including iOS momentum)
+    const el = containerRef2.current;
+    if (el) {
+      el.style.overflow = "hidden";
+      el.style.overscrollBehavior = "none";
+    }
 
     postsSinceGateRef.current = 0;
     frictionShownTsRef.current = Date.now();
@@ -273,6 +287,7 @@ export default function FrictionFeed({
     let animationFrameId = null;
     let isAnimatingScroll = false;
     let targetScrollTop = el.scrollTop;
+    let isTouching = false;
 
     const getMaxScrollTop = () => Math.max(0, el.scrollHeight - el.clientHeight);
     const clampScrollTop = (nextScrollTop) =>
@@ -325,6 +340,7 @@ export default function FrictionFeed({
     };
 
     const handleTouchStart = (event) => {
+      isTouching = true;
       lastTouchY = event.touches[0]?.clientY ?? null;
     };
 
@@ -346,11 +362,29 @@ export default function FrictionFeed({
     };
 
     const handleTouchEnd = () => {
+      isTouching = false;
       lastTouchY = null;
+
+      // Snap to damped position and kill momentum (critical for iOS)
+      if (slowdownActiveRef.current) {
+        stopAnimation();
+        isAnimatingScroll = true;
+        el.scrollTop = targetScrollTop;
+        isAnimatingScroll = false;
+      }
     };
 
     const handleNativeScroll = () => {
       if (isAnimatingScroll) return;
+
+      // Clamp momentum drift: if slowdown is active and finger is lifted,
+      // any native scroll event is iOS momentum — snap it back
+      if (slowdownActiveRef.current && !isTouching) {
+        isAnimatingScroll = true;
+        el.scrollTop = targetScrollTop;
+        isAnimatingScroll = false;
+        return;
+      }
 
       targetScrollTop = el.scrollTop;
       if (!slowdownActiveRef.current) {
@@ -378,6 +412,12 @@ export default function FrictionFeed({
 
   useEffect(() => () => {
     clearSlowdownTimers();
+    // Restore overflow on unmount
+    const el = containerRef2.current;
+    if (el) {
+      el.style.overflow = "";
+      el.style.overscrollBehavior = "";
+    }
     if (!slowdownActiveRef.current || !frictionShownTsRef.current) return;
 
     logFrictionDone({
@@ -412,7 +452,7 @@ export default function FrictionFeed({
         className="feed-container"
         role="feed"
         aria-label="Social media feed"
-        style={{ touchAction: slowdownVisible ? "none" : "pan-y" }}
+        style={{ touchAction: "pan-y" }}
       >
         {/* Progress bar */}
         <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm border-b border-gray-100 px-4 py-2 flex items-center justify-between">
