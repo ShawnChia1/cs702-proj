@@ -42,10 +42,10 @@ import useScrollTracker from "../../hooks/useScrollTracker";
 const POSTS_PER_PAGE = 5;
 const SLOWDOWN_DURATION_MS = 2500;
 const SLOWDOWN_FACTOR = 0.7;
-const SLOWDOWN_TOUCH_FACTOR = 0.7;
+const SLOWDOWN_TOUCH_FACTOR = 0.55;
 const SLOWDOWN_VELOCITY_THRESHOLD = 0.9;
-const TOUCH_MOMENTUM_DECAY = 0.6;
-const TOUCH_MOMENTUM_MIN_VELOCITY = 0.25;
+const TOUCH_MOMENTUM_DECAY = 0.88;
+const TOUCH_MOMENTUM_MIN_VELOCITY = 0.05;
 
 function getNumericUrlParam(name, fallback, min, max) {
   const params = new URLSearchParams(window.location.search);
