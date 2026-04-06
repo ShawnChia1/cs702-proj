@@ -305,11 +305,6 @@ export default function FrictionFeed({
         return;
       }
 
-      const delta = lastTouchY - currentY;
-      if (slowdownActiveRef.current && delta > 0) {
-        event.preventDefault();
-        applyDelta(delta);
-      }
       lastTouchY = currentY;
     };
 
@@ -386,7 +381,7 @@ export default function FrictionFeed({
         className="feed-container"
         role="feed"
         aria-label="Social media feed"
-        style={slowdownVisible ? { touchAction: "none" } : undefined}
+        style={{ touchAction: "pan-y" }}
       >
         {/* Progress bar */}
         <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm border-b border-gray-100 px-4 py-2 flex items-center justify-between">
