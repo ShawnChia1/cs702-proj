@@ -41,7 +41,8 @@ import useScrollTracker from "../../hooks/useScrollTracker";
 
 const POSTS_PER_PAGE = 5;
 const SLOWDOWN_DURATION_MS = 2500;
-const SLOWDOWN_FACTOR = 0.35;
+const SLOWDOWN_FACTOR = 0.55;
+const SLOWDOWN_EASING = 0.22;
 const SLOWDOWN_VELOCITY_THRESHOLD = 1.1;
 
 const FRICTION_COMPONENT = {
@@ -269,28 +270,58 @@ export default function FrictionFeed({
     if (!el || !isSlowdownCondition) return;
 
     let lastTouchY = null;
-    let isProgrammaticScroll = false;
-    let lastObservedScrollTop = el.scrollTop;
+    let animationFrameId = null;
+    let isAnimatingScroll = false;
+    let targetScrollTop = el.scrollTop;
 
-    const syncScrollTop = (nextScrollTop) => {
-      isProgrammaticScroll = true;
-      el.scrollTop = Math.max(0, nextScrollTop);
-      requestAnimationFrame(() => {
-        lastObservedScrollTop = el.scrollTop;
-        isProgrammaticScroll = false;
-      });
+    const getMaxScrollTop = () => Math.max(0, el.scrollHeight - el.clientHeight);
+    const clampScrollTop = (nextScrollTop) =>
+      Math.min(getMaxScrollTop(), Math.max(0, nextScrollTop));
+
+    const stopAnimation = () => {
+      if (animationFrameId != null) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+      }
     };
 
-    const applyDelta = (delta) => {
+    const animateTowardsTarget = () => {
+      animationFrameId = null;
+
+      const currentScrollTop = el.scrollTop;
+      const distance = targetScrollTop - currentScrollTop;
+      if (Math.abs(distance) < 0.5) {
+        if (currentScrollTop !== targetScrollTop) {
+          isAnimatingScroll = true;
+          el.scrollTop = targetScrollTop;
+          isAnimatingScroll = false;
+        }
+        return;
+      }
+
+      isAnimatingScroll = true;
+      el.scrollTop = currentScrollTop + (distance * SLOWDOWN_EASING);
+      isAnimatingScroll = false;
+      animationFrameId = requestAnimationFrame(animateTowardsTarget);
+    };
+
+    const ensureAnimation = () => {
+      if (animationFrameId == null) {
+        animationFrameId = requestAnimationFrame(animateTowardsTarget);
+      }
+    };
+
+    const queueDelta = (delta) => {
       if (Math.abs(delta) < 0.5) return;
       const factor = delta > 0 ? SLOWDOWN_FACTOR : 1;
-      syncScrollTop(el.scrollTop + (delta * factor));
+      targetScrollTop = clampScrollTop(targetScrollTop + (delta * factor));
+      ensureAnimation();
     };
 
     const handleWheel = (event) => {
-      if (!slowdownActiveRef.current || event.deltaY <= 0) return;
+      if (!slowdownActiveRef.current || event.deltaY === 0) return;
       event.preventDefault();
-      applyDelta(event.deltaY);
+      queueDelta(event.deltaY);
     };
 
     const handleTouchStart = (event) => {
@@ -305,6 +336,12 @@ export default function FrictionFeed({
         return;
       }
 
+      const delta = lastTouchY - currentY;
+      if (slowdownActiveRef.current && delta !== 0) {
+        event.preventDefault();
+        queueDelta(delta);
+      }
+
       lastTouchY = currentY;
     };
 
@@ -313,21 +350,13 @@ export default function FrictionFeed({
     };
 
     const handleNativeScroll = () => {
-      if (isProgrammaticScroll) {
-        lastObservedScrollTop = el.scrollTop;
-        return;
-      }
-      if (!slowdownActiveRef.current) {
-        lastObservedScrollTop = el.scrollTop;
-        return;
-      }
+      if (isAnimatingScroll) return;
 
-      const delta = el.scrollTop - lastObservedScrollTop;
-      if (delta > 0) {
-        syncScrollTop(lastObservedScrollTop + (delta * SLOWDOWN_FACTOR));
+      targetScrollTop = el.scrollTop;
+      if (!slowdownActiveRef.current) {
+        stopAnimation();
         return;
       }
-      lastObservedScrollTop = el.scrollTop;
     };
 
     el.addEventListener("wheel", handleWheel, { passive: false });
@@ -337,6 +366,7 @@ export default function FrictionFeed({
     el.addEventListener("scroll", handleNativeScroll, { passive: true });
 
     return () => {
+      stopAnimation();
       el.removeEventListener("wheel", handleWheel);
       el.removeEventListener("touchstart", handleTouchStart);
       el.removeEventListener("touchmove", handleTouchMove);
@@ -381,7 +411,7 @@ export default function FrictionFeed({
         className="feed-container"
         role="feed"
         aria-label="Social media feed"
-        style={{ touchAction: "pan-y" }}
+        style={{ touchAction: slowdownVisible ? "none" : "pan-y" }}
       >
         {/* Progress bar */}
         <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm border-b border-gray-100 px-4 py-2 flex items-center justify-between">
