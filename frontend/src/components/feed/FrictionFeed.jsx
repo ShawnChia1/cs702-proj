@@ -42,7 +42,6 @@ import useScrollTracker from "../../hooks/useScrollTracker";
 const POSTS_PER_PAGE = 5;
 const SLOWDOWN_DURATION_MS = 2500;
 const SLOWDOWN_FACTOR = 0.7;
-const SLOWDOWN_TOUCH_FACTOR = 0.7;
 const SLOWDOWN_VELOCITY_THRESHOLD = 0.9;
 
 const FRICTION_COMPONENT = {
@@ -269,14 +268,13 @@ export default function FrictionFeed({
     const el = containerRef2.current;
     if (!el || !isSlowdownCondition) return;
 
-    let lastTouchY = null;
     const getMaxScrollTop = () => Math.max(0, el.scrollHeight - el.clientHeight);
     const clampScrollTop = (nextScrollTop) =>
       Math.min(getMaxScrollTop(), Math.max(0, nextScrollTop));
 
-    const queueDelta = (delta, factorOverride) => {
+    const queueDelta = (delta) => {
       if (Math.abs(delta) < 0.5) return;
-      const factor = delta > 0 ? (factorOverride ?? SLOWDOWN_FACTOR) : 1;
+      const factor = delta > 0 ? SLOWDOWN_FACTOR : 1;
       el.scrollTop = clampScrollTop(el.scrollTop + (delta * factor));
     };
 
@@ -286,41 +284,10 @@ export default function FrictionFeed({
       queueDelta(event.deltaY);
     };
 
-    const handleTouchStart = (event) => {
-      lastTouchY = event.touches[0]?.clientY ?? null;
-    };
-
-    const handleTouchMove = (event) => {
-      const currentY = event.touches[0]?.clientY;
-      if (currentY == null) return;
-      if (lastTouchY == null) {
-        lastTouchY = currentY;
-        return;
-      }
-
-      const delta = lastTouchY - currentY;
-      if (slowdownActiveRef.current && delta !== 0) {
-        event.preventDefault();
-        queueDelta(delta, SLOWDOWN_TOUCH_FACTOR);
-      }
-
-      lastTouchY = currentY;
-    };
-
-    const handleTouchEnd = () => {
-      lastTouchY = null;
-    };
-
     el.addEventListener("wheel", handleWheel, { passive: false });
-    el.addEventListener("touchstart", handleTouchStart, { passive: true });
-    el.addEventListener("touchmove", handleTouchMove, { passive: false });
-    el.addEventListener("touchend", handleTouchEnd, { passive: true });
 
     return () => {
       el.removeEventListener("wheel", handleWheel);
-      el.removeEventListener("touchstart", handleTouchStart);
-      el.removeEventListener("touchmove", handleTouchMove);
-      el.removeEventListener("touchend", handleTouchEnd);
     };
   }, [isSlowdownCondition]);
 
@@ -360,7 +327,7 @@ export default function FrictionFeed({
         className="feed-container"
         role="feed"
         aria-label="Social media feed"
-        style={{ touchAction: slowdownVisible ? "none" : "pan-y" }}
+        style={{ touchAction: "pan-y" }}
       >
         {/* Progress bar */}
         <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm border-b border-gray-100 px-4 py-2 flex items-center justify-between">
