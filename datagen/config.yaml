@@ -1,0 +1,200 @@
+# ScrollStudy synthetic data generation parameters
+# All values derived from Meinhardt et al. (CHI'25) effect sizes and study hypotheses
+
+conditions:
+  control:
+    dprime_mean: 0.80
+    dprime_sd: 0.35
+    frustration_mean: 1.6
+    frustration_sd: 0.5
+    satisfaction_mean: 3.8
+    satisfaction_sd: 0.6
+    dwell_ms_mean: 2500
+    dwell_ms_sd: 800
+    friction_duration_ms_mean: 0    # no friction
+    friction_duration_ms_sd: 0
+
+  reaction:
+    dprime_mean: 1.70
+    dprime_sd: 0.40
+    frustration_mean: 4.1
+    frustration_sd: 0.6
+    satisfaction_mean: 2.2
+    satisfaction_sd: 0.7
+    dwell_ms_mean: 5500
+    dwell_ms_sd: 1200
+    friction_duration_ms_mean: 3000
+    friction_duration_ms_sd: 1000
+    friction_actions:
+      - "Like 👍"
+      - "Congratulations! 🎉"
+      - "Inspiring! 💡"
+      - "Love it! ❤️"
+      - "Not Interested"
+
+  button:
+    dprime_mean: 1.15
+    dprime_sd: 0.35
+    frustration_mean: 2.3
+    frustration_sd: 0.5
+    satisfaction_mean: 3.5
+    satisfaction_sd: 0.6
+    dwell_ms_mean: 3800
+    dwell_ms_sd: 900
+    friction_duration_ms_mean: 1200
+    friction_duration_ms_sd: 400
+    friction_actions:
+      - "continue"
+
+  feedback:
+    dprime_mean: 1.30
+    dprime_sd: 0.38
+    frustration_mean: 2.8
+    frustration_sd: 0.6
+    satisfaction_mean: 3.1
+    satisfaction_sd: 0.7
+    dwell_ms_mean: 4200
+    dwell_ms_sd: 1000
+    friction_duration_ms_mean: 2000
+    friction_duration_ms_sd: 600
+    friction_actions:
+      - "Yes, relevant 👍"
+      - "Not really 👎"
+
+  slowdown:
+    dprime_mean: 1.10
+    dprime_sd: 0.30
+    frustration_mean: 1.9
+    frustration_sd: 0.5
+    satisfaction_mean: 3.6
+    satisfaction_sd: 0.5
+    dwell_ms_mean: 3200
+    dwell_ms_sd: 850
+    friction_duration_ms_mean: 4000  # slowdown duration
+    friction_duration_ms_sd: 500
+    friction_actions:
+      - "slowdown_ended"
+
+# Frequency modulation for RQ2 (relative to freq=5 baseline)
+# d' multiplier and frustration multiplier per frequency
+frequency_modulation:
+  3:
+    dprime_multiplier: 1.18     # ~18% higher d' at freq=3 vs freq=5
+    frustration_multiplier: 1.30  # ~30% higher frustration
+  5:
+    dprime_multiplier: 1.00
+    frustration_multiplier: 1.00
+  10:
+    dprime_multiplier: 0.82
+    frustration_multiplier: 0.72
+  15:
+    dprime_multiplier: 0.68
+    frustration_multiplier: 0.55
+
+# Demographics distributions
+demographics:
+  age_min: 18
+  age_max: 45
+  gender_weights:
+    male: 0.45
+    female: 0.45
+    non-binary: 0.08
+    prefer-not: 0.02
+  usage_weights:
+    less-1h: 0.10
+    1-2h: 0.30
+    2-4h: 0.40
+    more-4h: 0.20
+  platforms:
+    - instagram
+    - tiktok
+    - twitter
+    - facebook
+    - reddit
+  platforms_min: 2
+  platforms_max: 4
+
+# Survey question profiles per condition (interface items i1-i7)
+# Values are (mean, sd) for truncated normal [1, 5]
+# i1=motivated, i2=frustrated, i3=demotivated, i4=attentive,
+# i5=would_use, i6=easy, i7=well_organised
+survey_profiles:
+  reaction:
+    i1: [3.5, 0.8]
+    # i2 uses frustration_mean/sd from condition params
+    i3: [3.8, 0.7]
+    i4: [4.0, 0.6]
+    i5: [2.0, 0.8]
+    i6: [3.2, 0.7]
+    i7: [3.0, 0.8]
+  button:
+    i1: [3.2, 0.7]
+    i3: [2.3, 0.6]
+    i4: [3.0, 0.7]
+    i5: [3.5, 0.7]
+    i6: [4.2, 0.5]
+    i7: [4.0, 0.6]
+  feedback:
+    i1: [3.5, 0.7]
+    i3: [2.8, 0.7]
+    i4: [3.5, 0.6]
+    i5: [3.0, 0.8]
+    i6: [3.8, 0.6]
+    i7: [3.5, 0.7]
+  slowdown:
+    i1: [3.8, 0.6]
+    i3: [2.0, 0.6]
+    i4: [3.2, 0.7]
+    i5: [3.8, 0.6]
+    i6: [4.0, 0.5]
+    i7: [3.8, 0.5]
+
+# General survey (g1-g5) — same distribution for all conditions
+general_survey:
+  g1: [3.8, 0.8]   # spend more time than intended
+  g2: [3.5, 0.9]   # lose track of time
+  g3: [3.2, 0.8]   # important to recall content
+  g4: [2.5, 0.9]   # remember most content at end of day
+  g5: [3.0, 1.0]   # use without paying attention
+
+# Post IDs (from frontend/src/data/posts.js)
+# 20 exposure + 10 distractors = 30 total
+# Memory test: 5 old (sampled from seen) + 10 new = 15 items
+posts:
+  exposure:
+    - art-01
+    - art-02
+    - cook-01
+    - cook-02
+    - learn-01
+    - learn-02
+    - sport-01
+    - sport-02
+    - pd-01
+    - pd-02
+    - ent-01
+    - ent-02
+    - tech-01
+    - tech-02
+    - yoga-01
+    - yoga-02
+    - res-01
+    - res-02
+    - hob-01
+    - hob-02
+  distractor:
+    - art-03
+    - cook-03
+    - learn-03
+    - sport-03
+    - pd-03
+    - ent-03
+    - tech-03
+    - yoga-03
+    - res-03
+    - hob-03
+
+# Memory test configuration (matches buildMemoryTestPool in posts.js)
+memory_test:
+  old_count: 5     # number of exposure posts sampled as "old" items
+  new_count: 10    # all distractors used as "new" items

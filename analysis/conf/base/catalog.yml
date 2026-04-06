@@ -1,0 +1,29 @@
+# Raw data extracted from Postgres (MemoryDataset — ephemeral, re-extracted each run)
+# These are produced by data_extraction nodes and consumed by feature_engineering.
+
+# Intermediate / feature datasets persisted as Parquet for inspection
+participant_features:
+  type: pandas.ParquetDataset
+  filepath: data/02_intermediate/participant_features.parquet
+
+# Statistical test results
+rq1_results:
+  type: json.JSONDataset
+  filepath: data/03_primary/rq1_results.json
+
+rq2_results:
+  type: json.JSONDataset
+  filepath: data/03_primary/rq2_results.json
+
+rq3_results:
+  type: json.JSONDataset
+  filepath: data/03_primary/rq3_results.json
+
+rq4_results:
+  type: json.JSONDataset
+  filepath: data/03_primary/rq4_results.json
+
+# Summary stats
+summary_stats:
+  type: json.JSONDataset
+  filepath: output/summary_stats.json

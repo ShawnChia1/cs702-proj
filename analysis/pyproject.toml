@@ -1,0 +1,46 @@
+[build-system]
+requires = [
+    "setuptools",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+requires-python = ">=3.10"
+name = "scrollstudy_analysis"
+readme = "README.md"
+dynamic = [
+    "version",
+]
+dependencies = [
+    "kedro~=1.3.0",
+    "sqlalchemy>=2.0",
+    "psycopg2-binary>=2.9",
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "scipy>=1.12",
+    "matplotlib>=3.8",
+    "seaborn>=0.13",
+    "python-dotenv>=1.0",
+]
+
+[project.scripts]
+scrollstudy-analysis = "scrollstudy_analysis.__main__:main"
+
+[project.entry-points."kedro.hooks"]
+
+[tool.setuptools.dynamic.version]
+attr = "scrollstudy_analysis.__version__"
+
+[tool.setuptools.packages.find]
+where = [
+    "src",
+]
+namespaces = false
+
+[tool.kedro]
+package_name = "scrollstudy_analysis"
+project_name = "scrollstudy_analysis"
+kedro_init_version = "1.3.0"
+tools = "['None']"
+example_pipeline = "False"
+source_dir = "src"
